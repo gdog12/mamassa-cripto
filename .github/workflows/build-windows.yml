@@ -1,0 +1,39 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allows you to run it manually from the Actions tab
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Generate Icon
+      run: |
+        python -m pip install --upgrade pip
+        pip install Pillow
+        python generate_icon.py
+
+    - name: Install Dependencies
+      run: |
+        pip install PyQt5 requests pyqtgraph pyinstaller
+
+    - name: Build EXE with PyInstaller
+      run: |
+        pyinstaller --noconfirm --onefile --windowed --icon=mmswc_icon.ico --name="MaMassa_Cripto" cripto.py
+
+    - name: Upload EXE Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: MaMassa-Cripto-Windows
+        path: dist/MaMassa_Cripto.exe
