@@ -1,22 +1,22 @@
 import sys
 import os
+
+# --- PYINSTALLER QT PLUGIN FIX ---
+if getattr(sys, 'frozen', False):
+    # We are running in a PyInstaller bundle
+    bundle_dir = sys._MEIPASS
+    # Tell Qt exactly where to find the platform plugins (like qwindows.dll)
+    os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(bundle_dir, 'PyQt5', 'Qt5', 'plugins', 'platforms')
+    
+    # Fallback for slightly different PyQt5 versions
+    if not os.path.exists(os.environ['QT_QPA_PLATFORM_PLUGIN_PATH']):
+        os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(bundle_dir, 'PyQt5', 'Qt', 'plugins', 'platforms")
+# ---------------------------------
+
 import hashlib
 import requests
 from datetime import datetime
-
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QTabWidget, QWidget, 
-                             QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
-                             QTableWidget, QTableWidgetItem, QHeaderView, 
-                             QSplitter, QLineEdit, QDialog, QFormLayout, 
-                             QMessageBox, QScrollArea, QFrame, QMenuBar, QAction, QMenu, QSizePolicy)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QUrl, QTimer, QDateTime
-from PyQt5.QtGui import QFont, QColor, QDesktopServices
-
-import pyqtgraph as pg
-
-# Suppress Wayland warning on Linux/Gnome
-os.environ["QT_QPA_PLATFORM"] = "xcb"
-
+# ... (the rest of your imports follow here)
 # --- Theme Definitions ---
 THEMES = {
     "Dark Purple": {
