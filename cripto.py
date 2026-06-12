@@ -1,16 +1,31 @@
 import sys
 import os
 
-# --- PYINSTALLER QT PLATFORM PLUGIN FIX (MUST BE BEFORE PYQT5 IMPORTS) ---
+# --- BULLETPROOF PYINSTALLER QT FIX ---
 if getattr(sys, 'frozen', False):
-    # Running as compiled executable (.exe)
     base_path = sys._MEIPASS
-    # Tell Qt exactly where to find the platform plugins (like qwindows.dll)
-    plugin_path = os.path.join(base_path, 'PyQt5', 'Qt5', 'plugins', 'platforms')
-    if not os.path.exists(plugin_path):
-        plugin_path = os.path.join(base_path, 'PyQt5', 'Qt', 'plugins', 'platforms')
-    os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = plugin_path
-# ------------------------------------------------------------------------
+    
+    # 1. Add Qt bin folder to PATH so qwindows.dll can find libEGL.dll, etc.
+    possible_bin_paths = [
+        os.path.join(base_path, 'PyQt5', 'Qt5', 'bin'),
+        os.path.join(base_path, 'PyQt5', 'Qt', 'bin'),
+    ]
+    for b_path in possible_bin_paths:
+        if os.path.exists(b_path):
+            os.environ['PATH'] = b_path + os.pathsep + os.environ.get('PATH', '')
+            break
+            
+    # 2. Point Qt to the correct plugins folder
+    possible_plugin_paths = [
+        os.path.join(base_path, 'PyQt5', 'Qt5', 'plugins'),
+        os.path.join(base_path, 'PyQt5', 'Qt', 'plugins'),
+    ]
+    for p_path in possible_plugin_paths:
+        if os.path.exists(p_path):
+            os.environ['QT_PLUGIN_PATH'] = p_path
+            os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = os.path.join(p_path, 'platforms')
+            break
+# --------------------------------------
 
 import hashlib
 import requests
@@ -613,7 +628,6 @@ class CryptoTracker(QMainWindow):
         title.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
         layout.addWidget(title)
         
-        # THIS IS THE LINE THAT WAS MISSING THE CLOSING QUOTE/PARENTHESIS
         desc = QLabel("Sign up on these regulated exchanges to buy, sell, and trade cryptocurrencies.")
         desc.setObjectName("statusLabel")
         layout.addWidget(desc)
