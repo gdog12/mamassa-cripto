@@ -613,4 +613,257 @@ class CryptoTracker(QMainWindow):
         title.setStyleSheet("font-size: 16px; font-weight: bold; margin-bottom: 10px;")
         layout.addWidget(title)
         
-        desc = QLabel("Sign up on these regulated exchanges to buy, sell, and trade cryptocurrencies
+        # THIS IS THE LINE THAT WAS MISSING THE CLOSING QUOTE/PARENTHESIS
+        desc = QLabel("Sign up on these regulated exchanges to buy, sell, and trade cryptocurrencies.")
+        desc.setObjectName("statusLabel")
+        layout.addWidget(desc)
+        
+        self.exchanges_table = QTableWidget()
+        self.exchanges_table.setColumnCount(4)
+        self.exchanges_table.setHorizontalHeaderLabels(["Exchange Name", "Region", "Features", "Action"])
+        self.exchanges_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.exchanges_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
+        self.exchanges_table.setColumnWidth(3, 120)
+        self.exchanges_table.verticalHeader().setVisible(False)
+        self.exchanges_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        layout.addWidget(self.exchanges_table)
+        
+        self.populate_exchanges()
+        self.tabs.addTab(tab, "🔗 Purchase Sites")
+
+    def auto_refresh_all(self):
+        self.fetch_trends()
+        current_time = QDateTime.currentDateTime().toString("hh:mm:ss")
+        self.company_refresh_label.setText(f"● Last verified: {current_time}")
+
+    def fetch_trends(self):
+        self.status_label.setText("Fetching latest market data...")
+        self.auto_refresh_label.setText("● Fetching...")
+        self.auto_refresh_label.setStyleSheet("color: #F59E0B; font-size: 12px; font-weight: bold;") 
+        
+        self.thread = DataFetcher()
+        self.thread.data_received.connect(self.update_trends_ui)
+        self.thread.error_occurred.connect(self.show_error)
+        self.thread.rate_limited.connect(self.show_rate_limit)
+        self.thread.start()
+
+    def update_trends_ui(self, data):
+        if not data:
+            self.status_label.setText("No data received from API.")
+            return
+
+        self.trends_table.setRowCount(len(data))
+        for row, coin in enumerate(data):
+            name = coin.get('name', 'Unknown')
+            symbol = coin.get('symbol', 'N/A').upper()
+            self.trends_table.setItem(row, 0, QTableWidgetItem(f"{name} ({symbol})"))
+            
+            price = coin.get('current_price')
+            price_str = f"${price:,.2f}" if price is not None else "N/A"
+            self.trends_table.setItem(row, 1, QTableWidgetItem(price_str))
+            
+            change = coin.get('price_change_percentage_24h')
+            if change is not None:
+                change_str = f"{change:.2f}%"
+                change_color = QColor("#10B981") if change >= 0 else QColor("#EF4444")
+            else:
+                change_str = "N/A"
+                change_color = QColor(THEMES[self.current_theme_name]['text_muted'])
+                
+            change_item = QTableWidgetItem(change_str)
+            change_item.setForeground(change_color)
+            self.trends_table.setItem(row, 2, change_item)
+            
+            mcap = coin.get('market_cap')
+            mcap_str = f"${mcap:,.0f}" if mcap is not None else "N/A"
+            self.trends_table.setItem(row, 3, QTableWidgetItem(mcap_str))
+            
+            vol = coin.get('total_volume')
+            vol_str = f"${vol:,.0f}" if vol is not None else "N/A"
+            self.trends_table.setItem(row, 4, QTableWidgetItem(vol_str))
+            
+        valid_coins = [c for c in data if c.get('total_volume') is not None]
+        top_10 = sorted(valid_coins, key=lambda x: x.get('total_volume', 0), reverse=True)[:10]
+        
+        self.volume_graph.clear()
+        if top_10:
+            names = [f"{c['symbol'].upper()}" for c in top_10]
+            volumes = [c.get('total_volume', 0) for c in top_10]
+            
+            t = THEMES[self.current_theme_name]
+            bg = pg.BarGraphItem(x=range(len(names)), height=volumes, width=0.6, brush=t['accent'])
+            self.volume_graph.addItem(bg)
+            
+            ax = self.volume_graph.getAxis('bottom')
+            ax.setTicks([[(i, name) for i, name in enumerate(names)]])
+        
+        self.status_label.setText(f"Success: {len(data)} coins loaded.")
+        self.auto_refresh_label.setText("● Auto-refreshing every 60s")
+        self.auto_refresh_label.setStyleSheet("color: #10B981; font-size: 12px; font-weight: bold;")
+        
+        self.filter_table(self.search_input.text())
+
+    def show_error(self, error_msg):
+        self.status_label.setText(f"Network error. Retrying in 60s...")
+        self.auto_refresh_label.setText("● Connection Error")
+        self.auto_refresh_label.setStyleSheet("color: #EF4444; font-size: 12px; font-weight: bold;")
+
+    def show_rate_limit(self):
+        self.status_label.setText("API Rate limit reached. Keeping last known data. Retrying in 60s...")
+        self.auto_refresh_label.setText("● Rate Limited (Waiting)")
+        self.auto_refresh_label.setStyleSheet("color: #F59E0B; font-size: 12px; font-weight: bold;")
+
+    def populate_companies(self):
+        companies = [
+            ("MicroStrategy", "MSTR", "Bitcoin (BTC)", "226,500+ BTC"),
+            ("Marathon Digital", "MARA", "Bitcoin (BTC)", "17,320+ BTC"),
+            ("Tesla", "TSLA", "Bitcoin (BTC)", "9,720 BTC"),
+            ("Coinbase Global", "COIN", "Multi-Asset", "Custody & Trading"),
+            ("Block (Square)", "XYZ", "Bitcoin (BTC)", "8,027 BTC"),
+            ("Riot Platforms", "RIOT", "Bitcoin (BTC)", "12,300+ BTC"),
+            ("Hut 8 Mining", "HUT", "Bitcoin (BTC)", "9,000+ BTC"),
+            ("Galaxy Digital", "GLXY", "Multi-Asset", "Institutional Trading"),
+            ("Metaplanet", "3350.T", "Bitcoin (BTC)", "13,000+ BTC"),
+            ("Seetee", "SEE.ST", "Bitcoin (BTC)", "3,500+ BTC"),
+            ("Cipher Mining", "CFIR", "Bitcoin (BTC)", "Mining & Holding"),
+            ("Iris Energy", "IREN", "Bitcoin (BTC)", "Mining & Holding"),
+            ("Bitfarms", "BITF", "Bitcoin (BTC)", "Mining & Holding"),
+            ("HIVE Digital", "HIVE", "Multi-Asset", "Mining & Holding"),
+            ("DMG Blockchain", "DMGI", "Multi-Asset", "Mining & Hosting"),
+            ("Exodus Movement", "EXOD", "Multi-Asset", "Wallet & Staking"),
+            ("Nexo", "NEXO", "Multi-Asset", "Lending & Custody"),
+            ("Digital Currency Group", "DCGC", "Multi-Asset", "Grayscale Parent Co."),
+            ("CleanSpark", "CLSK", "Bitcoin (BTC)", "8,000+ BTC"),
+            ("Semler Scientific", "SMLR", "Bitcoin (BTC)", "4,000+ BTC"),
+            ("Core Scientific", "CORZ", "Bitcoin (BTC)", "Mining & Hosting"),
+            ("Canaan Inc.", "CAN", "Bitcoin (BTC)", "Mining Hardware & Mining"),
+            ("Ebang International", "EBON", "Bitcoin (BTC)", "Mining Hardware & Mining"),
+            ("Bit Digital", "BTBT", "Bitcoin (BTC)", "Mining & Holding"),
+            ("Applied Digital", "APLD", "Bitcoin (BTC)", "Mining Infrastructure"),
+            ("Argo Blockchain", "ARBK", "Bitcoin (BTC)", "Mining & Holding"),
+            ("Twenty One Capital", "TONE.V", "Bitcoin (BTC)", "10,000+ BTC"),
+            ("Phoenix Group Holdings", "PHNX.L", "Bitcoin (BTC)", "5,000+ BTC"),
+            ("Nakamoto X", "NX", "Bitcoin (BTC)", "Treasury Holding"),
+            ("The Blockchain Group", "ALBGA.PA", "Bitcoin (BTC)", "1,800+ BTC"),
+            ("Mercury Fintech", "MRCY", "Bitcoin (BTC)", "Treasury Holding"),
+            ("Strive Asset Management", "STRV", "Bitcoin (BTC)", "Advocacy & Holding"),
+            ("NVIDIA", "NVDA", "Multi-Asset", "Mining Hardware (GPUs)"),
+            ("Advanced Micro Devices", "AMD", "Multi-Asset", "Mining Hardware (GPUs)"),
+            ("Microchip Technology", "MCHP", "Multi-Asset", "Mining Hardware"),
+            ("Taiwan Semiconductor", "TSM", "Multi-Asset", "Chip Manufacturing"),
+            ("PayPal Holdings", "PYPL", "Multi-Asset", "Crypto Checkout & Custody"),
+            ("Visa Inc.", "V", "Multi-Asset", "Crypto Settlement & Cards"),
+            ("Mastercard Inc.", "MA", "Multi-Asset", "Crypto Settlement & Cards"),
+            ("Robinhood Markets", "HOOD", "Multi-Asset", "Retail Crypto Trading"),
+            ("SoFi Technologies", "SOFI", "Multi-Asset", "Retail Crypto Trading"),
+            ("Block Inc. (Cash App)", "SQ", "Bitcoin (BTC)", "Trading & Treasury"),
+            ("MercadoLibre", "MELI", "Multi-Asset", "LatAm Crypto Trading"),
+            ("StoneCo", "STNE", "Multi-Asset", "LatAm Crypto Processing"),
+            ("Nu Holdings", "NU", "Multi-Asset", "LatAm Crypto Trading"),
+            ("Bakkt Holdings", "BKKT", "Multi-Asset", "Institutional Custody"),
+            ("CME Group", "CME", "Bitcoin (BTC)", "Futures & Derivatives"),
+            ("Cboe Global Markets", "CBOE", "Bitcoin (BTC)", "Futures & Derivatives"),
+            ("Intercontinental Exchange", "ICE", "Multi-Asset", "Bakkt Parent Co."),
+            ("Cantor Fitzgerald", "Private", "Bitcoin (BTC)", "Custody & B. Riley Investment"),
+            ("B. Riley Financial", "RILY", "Multi-Asset", "Crypto Investment Banking"),
+            ("CITIC Securities", "600030.SS", "Multi-Asset", "HashKey Group Investment"),
+            ("HashKey Group", "Private", "Multi-Asset", "Licensed Exchange (HK)"),
+            ("OSL Group", "0863.HK", "Multi-Asset", "Licensed Exchange (HK)"),
+            ("BC Technology Group", "0863.HK", "Multi-Asset", "OSL Parent Co."),
+            ("Coincheck Group", "Parent of Coincheck", "Multi-Asset", "Japanese Exchange"),
+            ("SBI Holdings", "8473.T", "Multi-Asset", "Japanese Crypto Ecosystem"),
+            ("GMO Internet", "9449.T", "Multi-Asset", "Japanese Mining & Exchange"),
+            ("Remixpoint", "3825.T", "Bitcoin (BTC)", "Japanese Mining & Holding"),
+            ("Franklin Templeton", "BEN", "Multi-Asset", "Spot Bitcoin ETF Issuer"),
+            ("BlackRock", "BLK", "Multi-Asset", "Spot Bitcoin ETF Issuer (IBIT)"),
+            ("Fidelity Investments", "Private", "Multi-Asset", "Spot Bitcoin ETF Issuer (FBTC)"),
+            ("Grayscale Investments", "Private", "Multi-Asset", "Spot Bitcoin ETF (GBTC)"),
+            ("VanEck", "Private", "Multi-Asset", "Spot Bitcoin ETF Issuer"),
+            ("ARK Invest", "Private", "Multi-Asset", "Spot Bitcoin ETF Issuer"),
+            ("Bitwise Asset Management", "Private", "Multi-Asset", "Spot Bitcoin ETF Issuer"),
+            ("Invesco", "IVZ", "Multi-Asset", "Spot Bitcoin ETF Issuer"),
+            ("Valkyrie Investments", "Private", "Multi-Asset", "Crypto Fund Manager"),
+            ("ProShares", "Private", "Multi-Asset", "Bitcoin Futures ETF"),
+            ("Volatility Shares", "Private", "Multi-Asset", "Bitcoin Futures ETF"),
+            ("T-Rex Asset Management", "Private", "Multi-Asset", "Bitcoin Futures ETF"),
+            ("Simplify Asset Management", "Private", "Multi-Asset", "Bitcoin Strategy ETF"),
+            ("Global X", "Private", "Multi-Asset", "Blockchain & Crypto ETFs"),
+            ("Amplify Investments", "Private", "Multi-Asset", "Blockchain ETF"),
+            ("Defiance ETFs", "Private", "Multi-Asset", "Crypto & Blockchain ETFs"),
+            ("First Trust", "Private", "Multi-Asset", "Crypto & Blockchain ETFs"),
+            ("WisdomTree", "Private", "Multi-Asset", "Crypto & Blockchain ETFs"),
+            ("21Shares", "Private", "Multi-Asset", "Crypto ETP Issuer"),
+            ("CoinShares", "Private", "Multi-Asset", "Crypto ETP Issuer"),
+            ("ETC Group", "Private", "Multi-Asset", "Crypto ETP Issuer"),
+            ("Purpose Investments", "Private", "Multi-Asset", "Canadian Bitcoin ETF"),
+            ("Evolve ETFs", "Private", "Multi-Asset", "Canadian Bitcoin ETF"),
+            ("3iQ Corp", "Private", "Multi-Asset", "Canadian Bitcoin ETF"),
+            ("CI Financial", "CIX.TO", "Multi-Asset", "Canadian Crypto Funds"),
+            ("Hamilton ETFs", "Private", "Multi-Asset", "Canadian Crypto ETFs"),
+            ("Ninepoint Partners", "Private", "Multi-Asset", "Canadian Crypto Funds"),
+            ("BitGo", "Private", "Multi-Asset", "Institutional Custody"),
+            ("Anchorage Digital", "Private", "Multi-Asset", "Federally Chartered Crypto Bank"),
+            ("Paxos Trust Company", "Private", "Multi-Asset", "Stablecoin Issuer & Custody"),
+            ("Circle Internet Financial", "Private", "Multi-Asset", "USDC Stablecoin Issuer"),
+            ("Tether Limited", "Private", "Multi-Asset", "USDT Stablecoin Issuer"),
+            ("Ripple Labs", "Private", "Multi-Asset", "XRP Ledger & Payments"),
+            ("Chainalysis", "Private", "Multi-Asset", "Blockchain Analytics"),
+            ("Elliptic", "Private", "Multi-Asset", "Blockchain Analytics"),
+            ("TRM Labs", "Private", "Multi-Asset", "Blockchain Intelligence"),
+            ("Fireblocks", "Private", "Multi-Asset", "Institutional Crypto Infrastructure"),
+            ("Ledger", "Private", "Multi-Asset", "Hardware Wallets"),
+            ("Trezor (SatoshiLabs)", "Private", "Multi-Asset", "Hardware Wallets")
+        ]
+        
+        self.companies_table.setRowCount(len(companies))
+        for row, (name, ticker, crypto, holdings) in enumerate(companies):
+            self.companies_table.setItem(row, 0, QTableWidgetItem(name))
+            ticker_item = QTableWidgetItem(ticker)
+            ticker_item.setForeground(QColor(THEMES[self.current_theme_name]['accent']))
+            self.companies_table.setItem(row, 1, ticker_item)
+            self.companies_table.setItem(row, 2, QTableWidgetItem(crypto))
+            self.companies_table.setItem(row, 3, QTableWidgetItem(holdings))
+
+    def populate_exchanges(self):
+        exchanges = [
+            ("Coinbase", "Global / US", "Best for beginners, publicly traded", "https://www.coinbase.com"),
+            ("Binance", "Global (Excl. US)", "Highest volume, advanced trading", "https://www.binance.com"),
+            ("Kraken", "Global / US", "High security, futures trading", "https://www.kraken.com"),
+            ("Crypto.com", "Global", "Great mobile app, crypto debit card", "https://crypto.com"),
+            ("Gemini", "US / Global", "Highly regulated, earn rewards", "https://www.gemini.com"),
+            ("Binance.US", "US Only", "US regulated version of Binance", "https://www.binance.us"),
+            ("Bitstamp", "Global / EU", "One of the oldest exchanges, EU regulated", "https://www.bitstamp.net"),
+            ("KuCoin", "Global", "Wide variety of altcoins, futures", "https://www.kucoin.com"),
+            ("OKX", "Global", "Advanced trading, Web3 wallet integration", "https://www.okx.com"),
+            ("Bybit", "Global", "Derivatives focus, copy trading", "https://www.bybit.com")
+        ]
+        
+        self.exchanges_table.setRowCount(len(exchanges))
+        for row, (name, region, features, url) in enumerate(exchanges):
+            self.exchanges_table.setItem(row, 0, QTableWidgetItem(name))
+            self.exchanges_table.setItem(row, 1, QTableWidgetItem(region))
+            self.exchanges_table.setItem(row, 2, QTableWidgetItem(features))
+            
+            visit_btn = QPushButton("Visit Site")
+            visit_btn.clicked.connect(lambda checked, u=url: QDesktopServices.openUrl(QUrl(u)))
+            self.exchanges_table.setCellWidget(row, 3, visit_btn)
+
+if __name__ == "__main__":
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion") 
+    
+    initial_theme = load_theme()
+    app.setStyleSheet(get_stylesheet(initial_theme))
+    pg.setConfigOption('background', THEMES[initial_theme]['graph_bg'])
+    pg.setConfigOption('foreground', THEMES[initial_theme]['graph_fg'])
+    
+    auth_dialog = AuthDialog()
+    if auth_dialog.exec_() == QDialog.Accepted:
+        window = CryptoTracker()
+        window.show()
+        sys.exit(app.exec_())
+    else:
+        sys.exit(0)
